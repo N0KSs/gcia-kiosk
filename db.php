@@ -13,17 +13,24 @@ function db(): PDO
     if ($init) {
         $pdo->exec("
       CREATE TABLE users(
-        id INT PRIMARY KEY AUTOINCREMENT,
-        nom TEXT, prenom TEXT, age INT,
-        pays TEXT, ville TEXT,
-        username TEXT UNIQUE, password_hash TEXT
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT,
+        prenom TEXT,
+        age INTEGER,
+        pays TEXT,
+        ville TEXT,
+        username TEXT UNIQUE,
+        password_hash TEXT
       );
     ");
         $pdo->exec("
       CREATE TABLE gifts(
-        id INT PRIMARY KEY AUTOINCREMENT,
-        user_id INT,
-        type TEXT, nom TEXT, description TEXT, prix_estime REAL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        type TEXT,
+        nom TEXT,
+        description TEXT,
+        prix_estime REAL,
         created_at TEXT DEFAULT (datetime('now'))
       );
     ");
