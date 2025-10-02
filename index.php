@@ -14,6 +14,7 @@ function json($ok, $data = [], $code = 200)
 if (isset($_GET['api'])) {
     $a = $_GET['api'];
 
+    // A) Inscription
     if ($a === 'register' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = fn($k) => trim($_POST[$k] ?? '');
         $nom = $f('nom');
@@ -23,6 +24,7 @@ if (isset($_GET['api'])) {
         $ville = $f('ville');
         $username = $f('username');
         $password = $_POST['password'] ?? '';
+
         if (!$nom || !$prenom || $age <= 0 || !$pays || !$ville || !$username || !$password) {
             json(false, ['error' => 'INVALID_FIELDS'], 400);
         }
@@ -36,6 +38,28 @@ if (isset($_GET['api'])) {
         json(true, ['message' => 'REGISTER_OK']);
     }
 
+    // B) Connexion
+    if ($a === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $stmt = $pdo->prepare("SELECT id, prenom, password_hash FROM users WHERE username=?");
+        $stmt->execute([$username]);
+        $u = $stmt->fetch();
+        if (!$u || !password_verify($password, $u['password_hash'])) {
+            json(false, ['error' => 'BAD_CREDENTIALS'], 401);
+        }
+        $_SESSION['uid'] = $u['id'];
+        $_SESSION['name'] = $u['prenom'];
+        json(true, ['message' => 'LOGIN_OK', 'name' => $u['prenom']]);
+    }
+
+    // Déconnexion (optionnel)
+    if ($a === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        session_destroy();
+        json(true, ['message' => 'LOGOUT_OK']);
+    }
+
+    // Si aucune API trouvée
     json(false, ['error' => 'NOT_FOUND'], 404);
 }
 ?>
@@ -51,8 +75,9 @@ if (isset($_GET['api'])) {
 
 <body>
     <div class="container">
-        <h1>🎅 GCIA — A) Inscription</h1>
+        <h1>🎅 GCIA — A) Inscription & B) Connexion</h1>
 
+        <!-- Formulaire A : Inscription -->
         <div class="card">
             <form id="form-register">
                 <div class="row">
@@ -73,21 +98,47 @@ if (isset($_GET['api'])) {
             </form>
         </div>
 
-        <script>
-            const reg = document.getElementById('form-register');
-            reg?.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const fd = new FormData(reg);
-                const r = await fetch('?api=register', {
-                    method: 'POST',
-                    body: fd
-                });
-                const j = await r.json();
-                document.getElementById('reg-msg').textContent = j.ok ? 'Inscription OK' :
-                    (j.error === 'USERNAME_TAKEN' ? 'Nom d’utilisateur déjà pris' : 'Champs invalides');
-            });
-        </script>
+        <!-- Formulaire B : Connexion -->
+        <div class="card">
+            <h3>🅱️ Connexion</h3>
+            <form id="form-login">
+                <label>Nom d’utilisateur</label><input name="username" required>
+                <label>Mot de passe</label><input type="password" name="password" required>
+                <button>Se connecter</button>
+                <div id="login-msg" class="notice"></div>
+            </form>
+        </div>
     </div>
+
+    <script>
+        // A) JS pour Inscription
+        const reg = document.getElementById('form-register');
+        reg?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(reg);
+            const r = await fetch('?api=register', {
+                method: 'POST',
+                body: fd
+            });
+            const j = await r.json();
+            document.getElementById('reg-msg').textContent =
+                j.ok ? 'Inscription OK' :
+                (j.error === 'USERNAME_TAKEN' ? 'Nom d’utilisateur déjà pris' : 'Champs invalides');
+        });
+
+        // B) JS pour Connexion
+        const flog = document.getElementById('form-login');
+        flog?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const r = await fetch('?api=login', {
+                method: 'POST',
+                body: new FormData(flog)
+            });
+            const j = await r.json();
+            document.getElementById('login-msg').textContent =
+                j.ok ? ('Bonjour ' + j.name) : 'Identifiants incorrects';
+        });
+    </script>
 </body>
 
 </html>
