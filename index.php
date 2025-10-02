@@ -53,7 +53,7 @@ if (isset($_GET['api'])) {
         json(true, ['message' => 'LOGIN_OK', 'name' => $u['prenom']]);
     }
 
-    // Déconnexion (optionnel)
+    // (optionnel) Déconnexion
     if ($a === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         session_destroy();
         json(true, ['message' => 'LOGOUT_OK']);
@@ -66,9 +66,7 @@ if (isset($_GET['api'])) {
         $newUser = trim($_POST['username'] ?? '');
         $newPass = trim($_POST['password'] ?? '');
 
-        if (!$newUser && !$newPass) {
-            json(false, ['error' => 'NOTHING'], 400);
-        }
+        if (!$newUser && !$newPass) json(false, ['error' => 'NOTHING'], 400);
 
         if ($newUser) {
             $chk = $pdo->prepare("SELECT id FROM users WHERE username=? AND id<>?");
@@ -103,6 +101,14 @@ if (isset($_GET['api'])) {
         json(true, ['message' => 'GIFT_OK']);
     }
 
+    // E) Lister mes demandes
+    if ($a === 'list_gifts') {
+        if (!isset($_SESSION['uid'])) json(false, ['error' => 'AUTH_REQUIRED'], 401);
+        $stmt = $pdo->prepare("SELECT type, nom, description, prix_estime, created_at FROM gifts WHERE user_id=? ORDER BY id DESC");
+        $stmt->execute([$_SESSION['uid']]);
+        json(true, ['items' => $stmt->fetchAll()]);
+    }
+
     // API non trouvée
     json(false, ['error' => 'NOT_FOUND'], 404);
 }
@@ -119,7 +125,7 @@ if (isset($_GET['api'])) {
 
 <body>
     <div class="container">
-        <h1>🎅 GCIA — A) Inscription • B) Connexion • C) Modifier identifiants • D) Demande de cadeau</h1>
+        <h1>🎅 GCIA — A) Inscription • B) Connexion • C) Modifier identifiants • D) Demande • E) Mes demandes</h1>
 
         <!-- A) Inscription -->
         <div class="card">
@@ -185,6 +191,13 @@ if (isset($_GET['api'])) {
                 <div id="gift-msg" class="notice"></div>
             </form>
         </div>
+
+        <!-- E) Mes demandes -->
+        <div class="card">
+            <h3>🅴 Mes demandes</h3>
+            <button id="btn-load">Charger mes demandes</button>
+            <div id="list"></div>
+        </div>
     </div>
 
     <script>
@@ -245,8 +258,25 @@ if (isset($_GET['api'])) {
                 j.ok ? 'Demande enregistrée' :
                 (j.error === 'AUTH_REQUIRED' ? 'Connecte-toi d’abord' : 'Champs invalides');
         });
+
+        // E) Mes demandes
+        document.getElementById('btn-load')?.addEventListener('click', async () => {
+            const r = await fetch('?api=list_gifts');
+            const j = await r.json();
+            const box = document.getElementById('list');
+            if (!j.ok) {
+                box.innerHTML = '<div class="error">Connecte-toi d’abord</div>';
+                return;
+            }
+            if (!j.items.length) {
+                box.innerHTML = '<div class="notice">Aucune demande pour l’instant.</div>';
+                return;
+            }
+            box.innerHTML = '<table><tr><th>Type</th><th>Nom</th><th>Description</th><th>Prix</th><th>Quand</th></tr>' +
+                j.items.map(x => `<tr><td>${x.type}</td><td>${x.nom}</td><td>${x.description}</td><td>${x.prix_estime}</td><td>${x.created_at}</td></tr>`).join('') +
+                '</table>';
+        });
     </script>
 </body>
 
 </html>
-php -S localhost:8000
