@@ -53,10 +53,42 @@ if (isset($_GET['api'])) {
         json(true, ['message' => 'LOGIN_OK', 'name' => $u['prenom']]);
     }
 
-    // Déconnexion (optionnel)
+    // (optionnel) Déconnexion
     if ($a === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         session_destroy();
         json(true, ['message' => 'LOGOUT_OK']);
+    }
+
+    // C) Modifier identifiants (username | mot de passe)
+    if ($a === 'update_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (!isset($_SESSION['uid'])) json(false, ['error' => 'AUTH_REQUIRED'], 401);
+
+        $newUser = trim($_POST['username'] ?? '');
+        $newPass = trim($_POST['password'] ?? '');
+
+        if (!$newUser && !$newPass) {
+            json(false, ['error' => 'NOTHING'], 400);
+        }
+
+        if ($newUser) {
+            // vérifier collision de username
+            $chk = $pdo->prepare("SELECT id FROM users WHERE username=? AND id<>?");
+            $chk->execute([$newUser, $_SESSION['uid']]);
+            if ($chk->fetch()) json(false, ['error' => 'USERNAME_TAKEN'], 409);
+        }
+
+        if ($newUser && $newPass) {
+            $q = $pdo->prepare("UPDATE users SET username=?, password_hash=? WHERE id=?");
+            $q->execute([$newUser, password_hash($newPass, PASSWORD_DEFAULT), $_SESSION['uid']]);
+        } elseif ($newUser) {
+            $q = $pdo->prepare("UPDATE users SET username=? WHERE id=?");
+            $q->execute([$newUser, $_SESSION['uid']]);
+        } else {
+            $q = $pdo->prepare("UPDATE users SET password_hash=? WHERE id=?");
+            $q->execute([password_hash($newPass, PASSWORD_DEFAULT), $_SESSION['uid']]);
+        }
+
+        json(true, ['message' => 'UPDATE_OK']);
     }
 
     // Si aucune API trouvée
@@ -75,9 +107,9 @@ if (isset($_GET['api'])) {
 
 <body>
     <div class="container">
-        <h1>🎅 GCIA — A) Inscription & B) Connexion</h1>
+        <h1>🎅 GCIA — A) Inscription • B) Connexion • C) Modifier identifiants</h1>
 
-        <!-- Formulaire A : Inscription -->
+        <!-- A) Inscription -->
         <div class="card">
             <form id="form-register">
                 <div class="row">
@@ -98,7 +130,7 @@ if (isset($_GET['api'])) {
             </form>
         </div>
 
-        <!-- Formulaire B : Connexion -->
+        <!-- B) Connexion -->
         <div class="card">
             <h3>🅱️ Connexion</h3>
             <form id="form-login">
@@ -108,10 +140,23 @@ if (isset($_GET['api'])) {
                 <div id="login-msg" class="notice"></div>
             </form>
         </div>
+
+        <!-- C) Modifier identifiants -->
+        <div class="card">
+            <h3>🅲 Modifier mes informations de connexion</h3>
+            <form id="form-update">
+                <label>Nouveau nom d’utilisateur (optionnel)</label>
+                <input name="username" placeholder="laisser vide si inchangé">
+                <label>Nouveau mot de passe (optionnel)</label>
+                <input type="password" name="password" placeholder="laisser vide si inchangé">
+                <button>Enregistrer</button>
+                <div id="upd-msg" class="notice"></div>
+            </form>
+        </div>
     </div>
 
     <script>
-        // A) JS pour Inscription
+        // A) Inscription
         const reg = document.getElementById('form-register');
         reg?.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -126,7 +171,7 @@ if (isset($_GET['api'])) {
                 (j.error === 'USERNAME_TAKEN' ? 'Nom d’utilisateur déjà pris' : 'Champs invalides');
         });
 
-        // B) JS pour Connexion
+        // B) Connexion
         const flog = document.getElementById('form-login');
         flog?.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -137,6 +182,22 @@ if (isset($_GET['api'])) {
             const j = await r.json();
             document.getElementById('login-msg').textContent =
                 j.ok ? ('Bonjour ' + j.name) : 'Identifiants incorrects';
+        });
+
+        // C) Modifier identifiants
+        const fupd = document.getElementById('form-update');
+        fupd?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const r = await fetch('?api=update_credentials', {
+                method: 'POST',
+                body: new FormData(fupd)
+            });
+            const j = await r.json();
+            document.getElementById('upd-msg').textContent =
+                j.ok ? 'Mise à jour OK' :
+                (j.error === 'AUTH_REQUIRED' ? 'Connecte-toi d’abord' :
+                    j.error === 'USERNAME_TAKEN' ? 'Nom déjà pris' :
+                    'Rien à mettre à jour');
         });
     </script>
 </body>
