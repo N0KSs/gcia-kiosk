@@ -53,13 +53,13 @@ if (isset($_GET['api'])) {
         json(true, ['message' => 'LOGIN_OK', 'name' => $u['prenom']]);
     }
 
-    // (optionnel) Déconnexion
+    // Déconnexion (optionnel)
     if ($a === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         session_destroy();
         json(true, ['message' => 'LOGOUT_OK']);
     }
 
-    // C) Modifier identifiants (username | mot de passe)
+    // C) Modifier identifiants
     if ($a === 'update_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!isset($_SESSION['uid'])) json(false, ['error' => 'AUTH_REQUIRED'], 401);
 
@@ -71,7 +71,6 @@ if (isset($_GET['api'])) {
         }
 
         if ($newUser) {
-            // vérifier collision de username
             $chk = $pdo->prepare("SELECT id FROM users WHERE username=? AND id<>?");
             $chk->execute([$newUser, $_SESSION['uid']]);
             if ($chk->fetch()) json(false, ['error' => 'USERNAME_TAKEN'], 409);
@@ -91,7 +90,20 @@ if (isset($_GET['api'])) {
         json(true, ['message' => 'UPDATE_OK']);
     }
 
-    // Si aucune API trouvée
+    // D) Ajouter une demande de cadeau
+    if ($a === 'add_gift' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (!isset($_SESSION['uid'])) json(false, ['error' => 'AUTH_REQUIRED'], 401);
+        $type = trim($_POST['type'] ?? '');
+        $nom = trim($_POST['nom'] ?? '');
+        $desc = trim($_POST['description'] ?? '');
+        $prix = (float)($_POST['prix'] ?? 0);
+        if (!$type || !$nom || !$desc || $prix <= 0) json(false, ['error' => 'INVALID_FIELDS'], 400);
+        $stmt = $pdo->prepare("INSERT INTO gifts(user_id,type,nom,description,prix_estime) VALUES(?,?,?,?,?)");
+        $stmt->execute([$_SESSION['uid'], $type, $nom, $desc, $prix]);
+        json(true, ['message' => 'GIFT_OK']);
+    }
+
+    // API non trouvée
     json(false, ['error' => 'NOT_FOUND'], 404);
 }
 ?>
@@ -107,7 +119,7 @@ if (isset($_GET['api'])) {
 
 <body>
     <div class="container">
-        <h1>🎅 GCIA — A) Inscription • B) Connexion • C) Modifier identifiants</h1>
+        <h1>🎅 GCIA — A) Inscription • B) Connexion • C) Modifier identifiants • D) Demande de cadeau</h1>
 
         <!-- A) Inscription -->
         <div class="card">
@@ -151,6 +163,26 @@ if (isset($_GET['api'])) {
                 <input type="password" name="password" placeholder="laisser vide si inchangé">
                 <button>Enregistrer</button>
                 <div id="upd-msg" class="notice"></div>
+            </form>
+        </div>
+
+        <!-- D) Demande de cadeau -->
+        <div class="card">
+            <h3>🅳 Demande de cadeau</h3>
+            <form id="form-gift">
+                <label>Type</label>
+                <select name="type" required>
+                    <option value="">Choisir…</option>
+                    <option>Jouet</option>
+                    <option>Vêtement</option>
+                    <option>Électronique</option>
+                    <option>Autre</option>
+                </select>
+                <label>Nom</label><input name="nom" required>
+                <label>Description</label><textarea name="description" required></textarea>
+                <label>Prix estimé</label><input type="number" step="0.01" name="prix" required>
+                <button>Soumettre</button>
+                <div id="gift-msg" class="notice"></div>
             </form>
         </div>
     </div>
@@ -199,7 +231,22 @@ if (isset($_GET['api'])) {
                     j.error === 'USERNAME_TAKEN' ? 'Nom déjà pris' :
                     'Rien à mettre à jour');
         });
+
+        // D) Demande de cadeau
+        const fg = document.getElementById('form-gift');
+        fg?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const r = await fetch('?api=add_gift', {
+                method: 'POST',
+                body: new FormData(fg)
+            });
+            const j = await r.json();
+            document.getElementById('gift-msg').textContent =
+                j.ok ? 'Demande enregistrée' :
+                (j.error === 'AUTH_REQUIRED' ? 'Connecte-toi d’abord' : 'Champs invalides');
+        });
     </script>
 </body>
 
 </html>
+php -S localhost:8000
